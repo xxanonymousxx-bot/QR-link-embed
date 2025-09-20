@@ -1,133 +1,181 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>OSINT Launchpad</title>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>OSINT Launchpad 2.0</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-  :root{
-    --bg:#0e1116; --panel:#161b22; --soft:#232a33; --text:#e6edf3; --muted:#9fb0c3; --accent:#5cc8ff; --ok:#8fff8f; --warn:#ffd166;
-  }
-  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 -apple-system,BlinkMacSystemFont,Inter,Segoe UI,Roboto,Helvetica,Arial}
-  header{padding:18px 20px;border-bottom:1px solid #202733;background:linear-gradient(180deg,#10161f,#0e1116)}
-  h1{margin:0;font-size:20px}
-  main{max-width:1200px;margin:0 auto;padding:18px}
-  .grid{display:grid;gap:14px}
-  @media(min-width:880px){.grid{grid-template-columns:340px 1fr}}
-  .card{background:var(--panel);border:1px solid #202733;border-radius:12px;padding:14px}
-  .row{display:flex;gap:8px;flex-wrap:wrap}
-  input,select,button,textarea{
-    background:var(--soft);color:var(--text);border:1px solid #2c3440;border-radius:8px;padding:10px 12px;font:inherit
-  }
-  input,select{width:100%}
-  button{cursor:pointer}
-  .pill{padding:6px 10px;border-radius:20px;background:#1b222c;border:1px solid #2b3644;color:var(--muted);font-size:12px}
-  a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
-  .links a{display:inline-block;margin:4px 6px 0 0}
-  pre{background:#0c1117;border:1px solid #202733;padding:12px;border-radius:8px;overflow:auto;max-height:360px}
-  .small{font-size:12px;color:var(--muted)}
-  .ok{color:var(--ok)} .warn{color:var(--warn)}
-  .tabbar{display:flex;gap:8px;margin:8px 0 12px}
-  .tabbar button{flex:1}
-  .badge{display:inline-block;background:#1d2530;border:1px solid #2e3a49;border-radius:6px;padding:2px 6px;margin-left:8px;color:var(--muted);font-size:12px}
+:root{
+  --bg:#0b0f14; --panel:#121821; --soft:#172131; --line:#233044;
+  --text:#e7eef7; --muted:#9fb0c3; --brand:#5cc8ff; --ok:#86f49b; --warn:#ffd166;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 -apple-system,BlinkMacSystemFont,Inter,Segoe UI,Roboto,Helvetica,Arial}
+header{padding:18px 20px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0e141d,#0b0f14)}
+h1{margin:0;font-size:22px;letter-spacing:.2px}
+.small{font-size:12px;color:var(--muted)}
+main{max-width:1200px;margin:0 auto;padding:18px}
+.grid{display:grid;gap:14px}
+@media(min-width:980px){.grid{grid-template-columns:380px 1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+input,select,button,textarea{
+  background:var(--soft);color:var(--text);border:1px solid var(--line);
+  border-radius:10px;padding:10px 12px;font:inherit
+}
+select,button{cursor:pointer}
+input,select{width:100%}
+button.primary{background:linear-gradient(180deg,#1c8dd8,#1579b8);border-color:#1b6ea5}
+button.ghost{background:transparent}
+a{color:var(--brand);text-decoration:none} a:hover{text-decoration:underline}
+.section-title{margin:10px 0 8px;font-size:15px;letter-spacing:.2px}
+.links a{display:inline-block;margin:4px 6px 0 0}
+pre{background:#0a1118;border:1px solid var(--line);padding:12px;border-radius:10px;overflow:auto;max-height:380px}
+.badge{display:inline-block;background:#162031;border:1px solid var(--line);border-radius:8px;padding:2px 6px;margin-left:8px;color:var(--muted);font-size:12px}
+#map{height:320px;border-radius:12px;border:1px solid var(--line);display:none}
+.inputs .row > *{flex:1}
+.kv{display:grid;grid-template-columns:140px 1fr;gap:8px;font-size:13px}
+.meter{height:10px;border-radius:6px;background:#1a2636;border:1px solid var(--line);overflow:hidden}
+.meter > span{display:block;height:100%;width:0;background:linear-gradient(90deg,#ff6b6b,#ffd166,#8fff8f)}
+.footer{padding:18px;text-align:center;color:var(--muted)}
 </style>
 </head>
 <body>
 <header>
-  <h1>OSINT Launchpad <span class="badge">client-side • no API keys</span></h1>
-  <div class="small">Enter a value below (URL, domain, IP, email, username, phone) → pick a tab → click links or run quick lookups.</div>
+  <h1>OSINT Launchpad 2.0 <span class="badge">client-side • no API keys</span></h1>
+  <div class="small">Pick a type (or Auto), run live lookups, and open curated tools. IP results include a map.</div>
 </header>
 
 <main class="grid">
-  <!-- Left: Inputs -->
-  <section class="card">
+  <!-- LEFT -->
+  <section class="card inputs">
+    <div class="section-title">Target</div>
     <div class="row">
-      <input id="q" placeholder="Paste target (e.g. https://example.com, example.com, 8.8.8.8, user@site, username, +1 415…)" />
-      <button id="detect">Detect</button>
-    </div>
-    <div class="tabbar">
-      <button data-tab="url">URL</button>
-      <button data-tab="domain">Domain</button>
-      <button data-tab="ip">IP</button>
-      <button data-tab="email">Email</button>
-      <button data-tab="user">Username</button>
-      <button data-tab="phone">Phone</button>
-      <button data-tab="image">Image</button>
-      <button data-tab="crypto">Crypto</button>
+      <input id="q" placeholder="Paste target (URL, domain, IP, email, username, phone)…"/>
+      <select id="type">
+        <option value="auto">Auto detect</option>
+        <option value="url">URL</option>
+        <option value="domain">Domain</option>
+        <option value="ip">IP</option>
+        <option value="email">Email</option>
+        <option value="user">Username</option>
+        <option value="phone">Phone</option>
+        <option value="image">Image</option>
+        <option value="crypto">Crypto</option>
+      </select>
     </div>
     <div class="row">
-      <button id="runLive">Run Live Lookups</button>
-      <button id="copyJSON">Copy JSON Report</button>
-      <button id="downloadJSON">Download JSON</button>
+      <button id="detect" class="primary">Detect Type</button>
+      <button id="run" class="primary">Run Live Lookups</button>
+      <button id="copyJSON">Copy JSON</button>
+      <button id="clear" class="ghost">Clear</button>
       <span id="status" class="small"></span>
     </div>
-    <div class="small" style="margin-top:10px">
-      Tip: URL → we’ll also parse the host and show domain tools. “Live lookups” call a few CORS-friendly APIs (DNS DoH, RDAP, IP whois/geo). Everything else opens in a new tab.
+
+    <div class="section-title" style="margin-top:14px">Password Generator</div>
+    <div class="kv" style="margin-bottom:8px">
+      <div>Length</div>
+      <div><input id="pwlen" type="range" min="8" max="64" value="16" oninput="$('#pwlenval').textContent=this.value"><span id="pwlenval" class="small" style="margin-left:8px">16</span></div>
+      <div>Character sets</div>
+      <div class="row">
+        <label><input type="checkbox" id="lower" checked> a-z</label>
+        <label><input type="checkbox" id="upper" checked> A-Z</label>
+        <label><input type="checkbox" id="digits" checked> 0-9</label>
+        <label><input type="checkbox" id="symbols" checked> !@#$%^&*…</label>
+        <label><input type="checkbox" id="noAmbig"> no ambiguous (O0l1I)</label>
+      </div>
+      <div>Password</div>
+      <div class="row">
+        <input id="pw" readonly>
+        <button id="gen" class="primary">Generate</button>
+        <button id="copyPW">Copy</button>
+      </div>
+      <div>Strength</div>
+      <div class="meter"><span id="meterbar"></span></div>
     </div>
+    <div class="small">Uses <code>crypto.getRandomValues</code> for secure randomness. Mix sets for stronger results.</div>
   </section>
 
-  <!-- Right: Results -->
+  <!-- RIGHT -->
   <section class="card">
+    <div class="section-title">Summary</div>
     <div id="summary" class="small"></div>
-    <h3>Tool Links</h3>
+
+    <div class="section-title">Quick Tools</div>
     <div id="links" class="links"></div>
-    <h3 style="margin-top:16px">Live Lookup Results</h3>
+
+    <div class="section-title">Live Lookup Results</div>
     <pre id="live">{}</pre>
+
+    <div class="section-title">IP Map</div>
+    <div id="map"></div>
   </section>
 </main>
 
+<div class="footer small">💡 Use responsibly. Some services rate-limit; live lookups call CORS-friendly endpoints only.</div>
+
 <script>
 const $ = s => document.querySelector(s);
-const status = msg => $("#status").textContent = msg||"";
-const val = () => ($("#q").value||"").trim();
+const status = msg => $("#status").textContent = msg || "";
 
 const isURL  = s => /^https?:\/\//i.test(s);
 const isIP   = s => /^\d{1,3}(\.\d{1,3}){3}$/.test(s);
 const isMail = s => /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(s);
 const isDom  = s => /^[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(s) && !isMail(s);
 const isPhone= s => /^\+?\d[\d\s().-]{6,}\d$/.test(s);
-
-function hostFromURL(u){ try { return new URL(u).hostname; } catch { return ""; } }
+const hostFromURL = u => { try { return new URL(u).hostname; } catch { return ""; } };
 
 let currentTab = "url";
-const report = { input:"", detected:"", tab:"", links:{}, live:{} };
+const report = { input:"", kind:"", links:{}, live:{} };
 
-function setTab(tab){ currentTab = tab; status(""); renderLinks(); }
-document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => setTab(b.dataset.tab));
+function setKind(kind){
+  currentTab = kind;
+  $("#type").value = kind === "user" ? "user" : kind;
+  renderLinks();
+}
+$("#type").onchange = e => setKind(e.target.value === "auto" ? detectKind() : e.target.value);
 
-$("#detect").onclick = () => {
-  const s = val();
-  if(!s){ status("Enter something first."); return; }
-  let kind = "user";
+function detectKind(){
+  const s = ($("#q").value || "").trim();
+  let kind = "user"; // default
   if (isURL(s)) kind = "url";
   else if (isIP(s)) kind = "ip";
   else if (isMail(s)) kind = "email";
   else if (isDom(s)) kind = "domain";
   else if (isPhone(s)) kind = "phone";
-  setTab(kind==="email"?"email":kind);
-  report.input = s; report.detected = kind;
+  report.kind = kind; report.input = s;
   $("#summary").textContent = `Detected: ${kind}`;
-  renderLinks();
-};
+  return kind;
+}
+
+$("#detect").onclick = () => setKind(detectKind());
+$("#clear").onclick  = () => { $("#q").value=""; $("#links").innerHTML=""; $("#live").textContent="{}"; $("#summary").textContent=""; status(""); hideMap(); };
 
 function addLink(name, url){
   const a = document.createElement("a");
-  a.href = url; a.textContent = name; a.target = "_blank"; a.rel = "noopener";
+  a.href = url; a.textContent = name; a.target="_blank"; a.rel="noopener";
   $("#links").appendChild(a);
   report.links[name] = url;
 }
 
 function renderLinks(){
-  $("#links").innerHTML = ""; report.links = {}; report.tab = currentTab;
-  const s = val(); if(!s){ status("Enter a value, then Detect."); return; }
-  const d = isURL(s) ? hostFromURL(s) : (isDom(s) ? s : "");
-  const urlOrHost = isURL(s) ? s : (isDom(s) ? "https://" + s : s);
+  $("#links").innerHTML = ""; report.links = {};
+  const s = ($("#q").value||"").trim(); if (!s) { status("Enter a value, then Detect."); return; }
+  let kind = $("#type").value === "auto" ? detectKind() : $("#type").value;
+  if (kind === "auto") kind = detectKind();
 
-  if (currentTab === "url" || currentTab === "domain"){
-    const host = currentTab==="domain" ? s : d;
-    if (!host){ addLink("— enter a URL/domain —", "#"); return; }
-    // general
-    addLink("Open", isURL(s) ? s : "https://" + host);
+  const addCommonSearchOps = (term) => {
+    addLink("Google", `https://www.google.com/search?q=${encodeURIComponent(term)}`);
+    addLink("DuckDuckGo", `https://duckduckgo.com/?q=${encodeURIComponent(term)}`);
+  };
+
+  if (kind === "url" || kind === "domain"){
+    const host = (kind==="domain") ? s : hostFromURL(s);
+    if (!host) { addLink("— enter a URL/domain —", "#"); return; }
+    addLink("Open", isURL(s) ? s : "https://"+host);
     addLink("Wayback", `https://web.archive.org/web/*/${host}`);
     addLink("urlscan.io", `https://urlscan.io/search/#domain:${host}`);
     addLink("VirusTotal", `https://www.virustotal.com/gui/domain/${host}`);
@@ -136,62 +184,57 @@ function renderLinks(){
     addLink("Kaspersky", `https://opentip.kaspersky.com/${host}`);
     addLink("Sucuri", `https://sitecheck.sucuri.net/results/${host}`);
     addLink("crt.sh (CT)", `https://crt.sh/?q=${host}`);
+    addLink("RapidDNS subdomains", `https://rapiddns.io/subdomain/${host}?full=1`);
+    addLink("ViewDNS IP history", `https://viewdns.info/iphistory/?domain=${host}`);
     addLink("RDAP", `https://rdap.org/domain/${host}`);
     addLink("DNSViz", `https://dnsviz.net/d/${host}/dnssec/`);
-    addLink("ViewDNS.info", `https://viewdns.info/iphistory/?domain=${host}`);
-    // search operators
     addLink("Google site:", `https://www.google.com/search?q=site:${host}`);
-    addLink("Google inurl:admin", `https://www.google.com/search?q=site:${host}+inurl:admin`);
-    addLink("Google filetype:pdf", `https://www.google.com/search?q=site:${host}+filetype:pdf`);
-    addLink("DuckDuckGo", `https://duckduckgo.com/?q=site:${host}`);
+    addLink("filetype:pdf", `https://www.google.com/search?q=site:${host}+filetype:pdf`);
+    addLink("inurl:admin", `https://www.google.com/search?q=site:${host}+inurl:admin`);
   }
 
-  if (currentTab === "ip"){
+  if (kind === "ip"){
     const ip = s;
-    addLink("IP WHOIS (RDAP)", `https://rdap.org/ip/${ip}`);
+    addLink("RDAP", `https://rdap.org/ip/${ip}`);
     addLink("ipwho.is (geo)", `https://ipwho.is/${ip}`);
     addLink("Shodan", `https://www.shodan.io/host/${ip}`);
     addLink("GreyNoise", `https://viz.greynoise.io/ip/${ip}`);
-    addLink("AbuseIPDB", `https://www.abuseipdb.com/check/${ip}`);
     addLink("Censys", `https://search.censys.io/hosts/${ip}`);
-    addLink("Talos", `https://talosintelligence.com/reputation_center/lookup?search=${ip}`);
+    addLink("AbuseIPDB", `https://www.abuseipdb.com/check/${ip}`);
+    addCommonSearchOps(ip);
   }
 
-  if (currentTab === "email"){
+  if (kind === "email"){
     const e = s;
-    addLink("Google", `https://www.google.com/search?q="${encodeURIComponent(e)}"`);
-    addLink("DuckDuckGo", `https://duckduckgo.com/?q=${encodeURIComponent(e)}`);
-    // tools (manual)
-    addLink("HaveIBeenPwned", "https://haveibeenpwned.com/");
+    addCommonSearchOps(`"${e}"`);
+    addLink("HaveIBeenPwned (manual)", "https://haveibeenpwned.com/");
     addLink("EmailRep", `https://emailrep.io/${encodeURIComponent(e)}`);
-    addLink("Hunter (verify)", "https://hunter.io/email-verifier");
-    const md5 = (str => { const b = new TextEncoder().encode(str.toLowerCase().trim()); return crypto.subtle.digest('MD5', b).then(buf => Array.from(new Uint8Array(buf)).map(x=>x.toString(16).padStart(2,'0')).join('')); });
-    // Gravatar link (compute MD5 with WebCrypto if supported)
-    if (window.crypto?.subtle){
-      md5(e).then(h => addLink("Gravatar", `https://www.gravatar.com/${h}`)).catch(()=>{});
-    }
+    addLink("Hunter verify", "https://hunter.io/email-verifier");
+    const user = e.split("@")[0];
+    // Offer username tools for the local-part:
+    addLink(`Username (GitHub): ${user}`, `https://github.com/${user}`);
+    addLink(`Username (Reddit): ${user}`, `https://reddit.com/user/${user}`);
+    addLink(`Username (X): ${user}`, `https://x.com/${user}`);
   }
 
-  if (currentTab === "user"){
+  if (kind === "user"){
     const u = s.replace(/^@/,"");
     addLink("GitHub", `https://github.com/${u}`);
     addLink("Reddit", `https://www.reddit.com/user/${u}`);
     addLink("X / Twitter", `https://x.com/${u}`);
     addLink("Instagram", `https://instagram.com/${u}`);
-    addLink("Namechk", `https://namechk.com/`);
     addLink("Keybase", `https://keybase.io/${u}`);
-    addLink("Search Google", `https://www.google.com/search?q=${encodeURIComponent(u)}`);
+    addLink("Namechk", "https://namechk.com/");
+    addCommonSearchOps(u);
   }
 
-  if (currentTab === "phone"){
-    const p = s.replace(/\s+/g," ");
-    addLink("Google", `https://www.google.com/search?q=${encodeURIComponent(p)}`);
-    addLink("DuckDuckGo", `https://duckduckgo.com/?q=${encodeURIComponent(p)}`);
-    addLink("Truecaller", `https://www.truecaller.com/search/${encodeURIComponent(p.replace(/\D+/g,""))}`);
-    addLink("ScamPulse BBB", `https://www.bbb.org/scamtracker/search?search=${encodeURIComponent(p)}`);
+  if (kind === "phone"){
+    addCommonSearchOps(s);
+    addLink("Truecaller", `https://www.truecaller.com/search/${encodeURIComponent(s.replace(/\D+/g,""))}`);
+    addLink("ScamPulse BBB", `https://www.bbb.org/scamtracker/search?search=${encodeURIComponent(s)}`);
   }
 
-  if (currentTab === "image"){
+  if (kind === "image"){
     addLink("Google Lens", `https://lens.google.com/`);
     addLink("Bing Visual Search", `https://www.bing.com/visualsearch`);
     addLink("TinEye", `https://tineye.com/`);
@@ -200,62 +243,114 @@ function renderLinks(){
     addLink("Forensically", `https://29a.ch/photo-forensics/`);
   }
 
-  if (currentTab === "crypto"){
+  if (kind === "crypto"){
     const x = s.trim();
-    addLink("BTC (blockchain.com)", `https://www.blockchain.com/explorer/addresses/btc/${x}`);
-    addLink("BTC (mempool.space)", `https://mempool.space/address/${x}`);
-    addLink("ETH (etherscan.io)", `https://etherscan.io/address/${x}`);
-    addLink("Solana (solscan)", `https://solscan.io/account/${x}`);
+    addLink("BTC — mempool.space", `https://mempool.space/address/${x}`);
+    addLink("BTC — blockchain.com", `https://www.blockchain.com/explorer/addresses/btc/${x}`);
+    addLink("ETH — etherscan", `https://etherscan.io/address/${x}`);
+    addLink("SOL — solscan", `https://solscan.io/account/${x}`);
   }
 }
 
 async function runLive(){
-  const s = val(); if(!s){ status("Enter something first."); return; }
-  status("Running live lookups…");
-  const out = { input:s, tab:currentTab, when:new Date().toISOString(), results:{} };
+  const s = ($("#q").value||"").trim(); if (!s){ status("Enter something first."); return; }
+  let kind = $("#type").value === "auto" ? detectKind() : $("#type").value;
+  status("Running…");
+  const out = { input:s, kind, when:new Date().toISOString(), results:{} };
   try{
-    if (currentTab==="domain" || (currentTab==="url" && isURL(s))){
-      const host = currentTab==="domain" ? s : hostFromURL(s);
+    if (kind==="domain" || (kind==="url" && isURL(s))){
+      const host = (kind==="domain") ? s : hostFromURL(s);
       if (host){
-        const doh = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(host)}&type=A`, {headers:{Accept:"application/dns-json"}}).then(r=>r.json()).catch(_=>null);
-        const rdap = await fetch(`https://rdap.org/domain/${encodeURIComponent(host)}`).then(r=>r.json()).catch(_=>null);
-        out.results.dnsA = (doh?.Answer||[]).map(a=>a.data);
-        out.results.rdap = rdap||null;
+        const dnsA  = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(host)}&type=A`,   {headers:{Accept:"application/dns-json"}}).then(r=>r.json()).catch(_=>null);
+        const dnsMX = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(host)}&type=MX`,  {headers:{Accept:"application/dns-json"}}).then(r=>r.json()).catch(_=>null);
+        const dnsNS = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(host)}&type=NS`,  {headers:{Accept:"application/dns-json"}}).then(r=>r.json()).catch(_=>null);
+        const rdap  = await fetch(`https://rdap.org/domain/${encodeURIComponent(host)}`).then(r=>r.json()).catch(_=>null);
+        out.results.dns = {
+          A: (dnsA?.Answer||[]).map(a=>a.data),
+          MX:(dnsMX?.Answer||[]).map(a=>a.data),
+          NS:(dnsNS?.Answer||[]).map(a=>a.data)
+        };
+        out.results.rdap = rdap || null;
       }
     }
-    if (currentTab==="ip"){
+    if (kind==="ip"){
       const ip = s;
       const who = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}`).then(r=>r.json()).catch(_=>null);
       const rd  = await fetch(`https://rdap.org/ip/${encodeURIComponent(ip)}`).then(r=>r.json()).catch(_=>null);
       out.results.ipwhois = who||null;
       out.results.rdap    = rd||null;
-    }
+      showMap(who?.latitude, who?.longitude, ip, who);
+    } else { hideMap(); }
   }catch(e){ out.error = String(e); }
   $("#live").textContent = JSON.stringify(out, null, 2);
   report.live = out;
   status("Done.");
 }
+$("#run").onclick = runLive;
 
-$("#runLive").onclick = runLive;
-
-$("#copyJSON").onclick = async () => {
-  const blob = JSON.stringify({ ...report, input: val(), tab: currentTab, when: new Date().toISOString() }, null, 2);
-  await navigator.clipboard.writeText(blob).catch(()=>{});
-  status("Copied JSON to clipboard.");
-};
-$("#downloadJSON").onclick = () => {
-  const data = JSON.stringify({ ...report, input: val(), tab: currentTab, when: new Date().toISOString() }, null, 2);
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([data], {type:"application/json"}));
-  a.download = `osint_${Date.now()}.json`;
-  a.click();
+$("#copyJSON").onclick = async ()=>{
+  const data = JSON.stringify({ ...report, input:($("#q").value||"").trim(), kind:currentTab||report.kind, when:new Date().toISOString() }, null, 2);
+  await navigator.clipboard.writeText(data).catch(()=>{});
+  status("Copied JSON.");
 };
 
-renderLinks(); // initial
+// ----- Leaflet map helpers -----
+let map, marker;
+function ensureMap(){
+  if (!map){
+    map = L.map('map', {zoomControl:true, attributionControl:true});
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+  }
+}
+function showMap(lat, lon, label, info){
+  if (typeof lat!=="number" || typeof lon!=="number"){ hideMap(); return; }
+  $("#map").style.display = "block"; ensureMap();
+  map.setView([lat, lon], 9);
+  if (marker) marker.remove();
+  const html = `
+    <div><strong>${label||""}</strong></div>
+    <div class="small">${(info?.city||"")}, ${(info?.region||"")}, ${(info?.country||"")}</div>
+    <div class="small">ASN: ${info?.connection?.asn||info?.asn||""}</div>`;
+  marker = L.marker([lat, lon]).addTo(map).bindPopup(html).openPopup();
+}
+function hideMap(){ $("#map").style.display = "none"; if (map && marker){ marker.remove(); marker = null; } }
+
+// ----- Password generator -----
+const CH = {
+  lower: "abcdefghijklmnopqrstuvwxyz",
+  upper: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+  digits:"0123456789",
+  symbols:"!@#$%^&*()_-+=[]{};:,.?/|~`<>"
+};
+function genPassword(){
+  const L = +$("#pwlen").value;
+  let pool = "";
+  if ($("#lower").checked) pool += CH.lower;
+  if ($("#upper").checked) pool += CH.upper;
+  if ($("#digits").checked) pool += CH.digits;
+  if ($("#symbols").checked) pool += CH.symbols;
+  if ($("#noAmbig").checked) pool = pool.replace(/[O0l1I]/g,"");
+  if (!pool) { $("#pw").value="(choose sets)"; return; }
+  const arr = new Uint32Array(L);
+  crypto.getRandomValues(arr);
+  let out = "";
+  for (let i=0;i<L;i++) out += pool[arr[i]%pool.length];
+  $("#pw").value = out;
+  strengthMeter(out);
+}
+function strengthMeter(pw){
+  // naive: length + variety
+  const sets = [/[a-z]/,/[A-Z]/,/[0-9]/,/[^A-Za-z0-9]/].reduce((n,rx)=>n+(rx.test(pw)?1:0),0);
+  const score = Math.min(1, (pw.length/24)*0.6 + (sets-1)*0.133);
+  $("#meterbar").style.width = `${Math.round(score*100)}%`;
+}
+$("#gen").onclick = genPassword;
+$("#copyPW").onclick = async ()=>{ await navigator.clipboard.writeText($("#pw").value||""); status("Password copied."); };
+
+// initialize
+renderLinks();
 </script>
-
-<footer class="small" style="padding:16px;text-align:center;color:#7b8a99">
-  💡 Use responsibly. Some services rate-limit; live lookups only call CORS-friendly endpoints.
-</footer>
 </body>
 </html>
