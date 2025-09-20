@@ -1,26 +1,261 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>YouTube Autoplay</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    html, body { height: 100%; margin: 0; background: #000; }
-    .wrap { height: 100%; display: grid; place-items: center; }
-    iframe {
-      width: 80vw; height: 45vw;
-      max-width: 960px; max-height: 540px; border: 0;
-    }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>OSINT Launchpad</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --soft:#232a33; --text:#e6edf3; --muted:#9fb0c3; --accent:#5cc8ff; --ok:#8fff8f; --warn:#ffd166;
+  }
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 -apple-system,BlinkMacSystemFont,Inter,Segoe UI,Roboto,Helvetica,Arial}
+  header{padding:18px 20px;border-bottom:1px solid #202733;background:linear-gradient(180deg,#10161f,#0e1116)}
+  h1{margin:0;font-size:20px}
+  main{max-width:1200px;margin:0 auto;padding:18px}
+  .grid{display:grid;gap:14px}
+  @media(min-width:880px){.grid{grid-template-columns:340px 1fr}}
+  .card{background:var(--panel);border:1px solid #202733;border-radius:12px;padding:14px}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  input,select,button,textarea{
+    background:var(--soft);color:var(--text);border:1px solid #2c3440;border-radius:8px;padding:10px 12px;font:inherit
+  }
+  input,select{width:100%}
+  button{cursor:pointer}
+  .pill{padding:6px 10px;border-radius:20px;background:#1b222c;border:1px solid #2b3644;color:var(--muted);font-size:12px}
+  a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+  .links a{display:inline-block;margin:4px 6px 0 0}
+  pre{background:#0c1117;border:1px solid #202733;padding:12px;border-radius:8px;overflow:auto;max-height:360px}
+  .small{font-size:12px;color:var(--muted)}
+  .ok{color:var(--ok)} .warn{color:var(--warn)}
+  .tabbar{display:flex;gap:8px;margin:8px 0 12px}
+  .tabbar button{flex:1}
+  .badge{display:inline-block;background:#1d2530;border:1px solid #2e3a49;border-radius:6px;padding:2px 6px;margin-left:8px;color:var(--muted);font-size:12px}
+</style>
 </head>
 <body>
-  <div class="wrap">
-    <iframe
-      src="https://www.youtube.com/embed/dQw4w9WgXcQ?autoplay=1&mute=1"
-      title="YouTube video player"
-      allow="autoplay; encrypted-media"
-      allowfullscreen>
-    </iframe>
-  </div>
+<header>
+  <h1>OSINT Launchpad <span class="badge">client-side • no API keys</span></h1>
+  <div class="small">Enter a value below (URL, domain, IP, email, username, phone) → pick a tab → click links or run quick lookups.</div>
+</header>
+
+<main class="grid">
+  <!-- Left: Inputs -->
+  <section class="card">
+    <div class="row">
+      <input id="q" placeholder="Paste target (e.g. https://example.com, example.com, 8.8.8.8, user@site, username, +1 415…)" />
+      <button id="detect">Detect</button>
+    </div>
+    <div class="tabbar">
+      <button data-tab="url">URL</button>
+      <button data-tab="domain">Domain</button>
+      <button data-tab="ip">IP</button>
+      <button data-tab="email">Email</button>
+      <button data-tab="user">Username</button>
+      <button data-tab="phone">Phone</button>
+      <button data-tab="image">Image</button>
+      <button data-tab="crypto">Crypto</button>
+    </div>
+    <div class="row">
+      <button id="runLive">Run Live Lookups</button>
+      <button id="copyJSON">Copy JSON Report</button>
+      <button id="downloadJSON">Download JSON</button>
+      <span id="status" class="small"></span>
+    </div>
+    <div class="small" style="margin-top:10px">
+      Tip: URL → we’ll also parse the host and show domain tools. “Live lookups” call a few CORS-friendly APIs (DNS DoH, RDAP, IP whois/geo). Everything else opens in a new tab.
+    </div>
+  </section>
+
+  <!-- Right: Results -->
+  <section class="card">
+    <div id="summary" class="small"></div>
+    <h3>Tool Links</h3>
+    <div id="links" class="links"></div>
+    <h3 style="margin-top:16px">Live Lookup Results</h3>
+    <pre id="live">{}</pre>
+  </section>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const status = msg => $("#status").textContent = msg||"";
+const val = () => ($("#q").value||"").trim();
+
+const isURL  = s => /^https?:\/\//i.test(s);
+const isIP   = s => /^\d{1,3}(\.\d{1,3}){3}$/.test(s);
+const isMail = s => /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(s);
+const isDom  = s => /^[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(s) && !isMail(s);
+const isPhone= s => /^\+?\d[\d\s().-]{6,}\d$/.test(s);
+
+function hostFromURL(u){ try { return new URL(u).hostname; } catch { return ""; } }
+
+let currentTab = "url";
+const report = { input:"", detected:"", tab:"", links:{}, live:{} };
+
+function setTab(tab){ currentTab = tab; status(""); renderLinks(); }
+document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => setTab(b.dataset.tab));
+
+$("#detect").onclick = () => {
+  const s = val();
+  if(!s){ status("Enter something first."); return; }
+  let kind = "user";
+  if (isURL(s)) kind = "url";
+  else if (isIP(s)) kind = "ip";
+  else if (isMail(s)) kind = "email";
+  else if (isDom(s)) kind = "domain";
+  else if (isPhone(s)) kind = "phone";
+  setTab(kind==="email"?"email":kind);
+  report.input = s; report.detected = kind;
+  $("#summary").textContent = `Detected: ${kind}`;
+  renderLinks();
+};
+
+function addLink(name, url){
+  const a = document.createElement("a");
+  a.href = url; a.textContent = name; a.target = "_blank"; a.rel = "noopener";
+  $("#links").appendChild(a);
+  report.links[name] = url;
+}
+
+function renderLinks(){
+  $("#links").innerHTML = ""; report.links = {}; report.tab = currentTab;
+  const s = val(); if(!s){ status("Enter a value, then Detect."); return; }
+  const d = isURL(s) ? hostFromURL(s) : (isDom(s) ? s : "");
+  const urlOrHost = isURL(s) ? s : (isDom(s) ? "https://" + s : s);
+
+  if (currentTab === "url" || currentTab === "domain"){
+    const host = currentTab==="domain" ? s : d;
+    if (!host){ addLink("— enter a URL/domain —", "#"); return; }
+    // general
+    addLink("Open", isURL(s) ? s : "https://" + host);
+    addLink("Wayback", `https://web.archive.org/web/*/${host}`);
+    addLink("urlscan.io", `https://urlscan.io/search/#domain:${host}`);
+    addLink("VirusTotal", `https://www.virustotal.com/gui/domain/${host}`);
+    addLink("Talos", `https://talosintelligence.com/reputation_center/lookup?search=${host}`);
+    addLink("FortiGuard", `https://www.fortiguard.com/webfilter?q=${host}&version=8`);
+    addLink("Kaspersky", `https://opentip.kaspersky.com/${host}`);
+    addLink("Sucuri", `https://sitecheck.sucuri.net/results/${host}`);
+    addLink("crt.sh (CT)", `https://crt.sh/?q=${host}`);
+    addLink("RDAP", `https://rdap.org/domain/${host}`);
+    addLink("DNSViz", `https://dnsviz.net/d/${host}/dnssec/`);
+    addLink("ViewDNS.info", `https://viewdns.info/iphistory/?domain=${host}`);
+    // search operators
+    addLink("Google site:", `https://www.google.com/search?q=site:${host}`);
+    addLink("Google inurl:admin", `https://www.google.com/search?q=site:${host}+inurl:admin`);
+    addLink("Google filetype:pdf", `https://www.google.com/search?q=site:${host}+filetype:pdf`);
+    addLink("DuckDuckGo", `https://duckduckgo.com/?q=site:${host}`);
+  }
+
+  if (currentTab === "ip"){
+    const ip = s;
+    addLink("IP WHOIS (RDAP)", `https://rdap.org/ip/${ip}`);
+    addLink("ipwho.is (geo)", `https://ipwho.is/${ip}`);
+    addLink("Shodan", `https://www.shodan.io/host/${ip}`);
+    addLink("GreyNoise", `https://viz.greynoise.io/ip/${ip}`);
+    addLink("AbuseIPDB", `https://www.abuseipdb.com/check/${ip}`);
+    addLink("Censys", `https://search.censys.io/hosts/${ip}`);
+    addLink("Talos", `https://talosintelligence.com/reputation_center/lookup?search=${ip}`);
+  }
+
+  if (currentTab === "email"){
+    const e = s;
+    addLink("Google", `https://www.google.com/search?q="${encodeURIComponent(e)}"`);
+    addLink("DuckDuckGo", `https://duckduckgo.com/?q=${encodeURIComponent(e)}`);
+    // tools (manual)
+    addLink("HaveIBeenPwned", "https://haveibeenpwned.com/");
+    addLink("EmailRep", `https://emailrep.io/${encodeURIComponent(e)}`);
+    addLink("Hunter (verify)", "https://hunter.io/email-verifier");
+    const md5 = (str => { const b = new TextEncoder().encode(str.toLowerCase().trim()); return crypto.subtle.digest('MD5', b).then(buf => Array.from(new Uint8Array(buf)).map(x=>x.toString(16).padStart(2,'0')).join('')); });
+    // Gravatar link (compute MD5 with WebCrypto if supported)
+    if (window.crypto?.subtle){
+      md5(e).then(h => addLink("Gravatar", `https://www.gravatar.com/${h}`)).catch(()=>{});
+    }
+  }
+
+  if (currentTab === "user"){
+    const u = s.replace(/^@/,"");
+    addLink("GitHub", `https://github.com/${u}`);
+    addLink("Reddit", `https://www.reddit.com/user/${u}`);
+    addLink("X / Twitter", `https://x.com/${u}`);
+    addLink("Instagram", `https://instagram.com/${u}`);
+    addLink("Namechk", `https://namechk.com/`);
+    addLink("Keybase", `https://keybase.io/${u}`);
+    addLink("Search Google", `https://www.google.com/search?q=${encodeURIComponent(u)}`);
+  }
+
+  if (currentTab === "phone"){
+    const p = s.replace(/\s+/g," ");
+    addLink("Google", `https://www.google.com/search?q=${encodeURIComponent(p)}`);
+    addLink("DuckDuckGo", `https://duckduckgo.com/?q=${encodeURIComponent(p)}`);
+    addLink("Truecaller", `https://www.truecaller.com/search/${encodeURIComponent(p.replace(/\D+/g,""))}`);
+    addLink("ScamPulse BBB", `https://www.bbb.org/scamtracker/search?search=${encodeURIComponent(p)}`);
+  }
+
+  if (currentTab === "image"){
+    addLink("Google Lens", `https://lens.google.com/`);
+    addLink("Bing Visual Search", `https://www.bing.com/visualsearch`);
+    addLink("TinEye", `https://tineye.com/`);
+    addLink("Yandex Images", `https://yandex.com/images/`);
+    addLink("Exif.tools", `https://exif.tools/`);
+    addLink("Forensically", `https://29a.ch/photo-forensics/`);
+  }
+
+  if (currentTab === "crypto"){
+    const x = s.trim();
+    addLink("BTC (blockchain.com)", `https://www.blockchain.com/explorer/addresses/btc/${x}`);
+    addLink("BTC (mempool.space)", `https://mempool.space/address/${x}`);
+    addLink("ETH (etherscan.io)", `https://etherscan.io/address/${x}`);
+    addLink("Solana (solscan)", `https://solscan.io/account/${x}`);
+  }
+}
+
+async function runLive(){
+  const s = val(); if(!s){ status("Enter something first."); return; }
+  status("Running live lookups…");
+  const out = { input:s, tab:currentTab, when:new Date().toISOString(), results:{} };
+  try{
+    if (currentTab==="domain" || (currentTab==="url" && isURL(s))){
+      const host = currentTab==="domain" ? s : hostFromURL(s);
+      if (host){
+        const doh = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(host)}&type=A`, {headers:{Accept:"application/dns-json"}}).then(r=>r.json()).catch(_=>null);
+        const rdap = await fetch(`https://rdap.org/domain/${encodeURIComponent(host)}`).then(r=>r.json()).catch(_=>null);
+        out.results.dnsA = (doh?.Answer||[]).map(a=>a.data);
+        out.results.rdap = rdap||null;
+      }
+    }
+    if (currentTab==="ip"){
+      const ip = s;
+      const who = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}`).then(r=>r.json()).catch(_=>null);
+      const rd  = await fetch(`https://rdap.org/ip/${encodeURIComponent(ip)}`).then(r=>r.json()).catch(_=>null);
+      out.results.ipwhois = who||null;
+      out.results.rdap    = rd||null;
+    }
+  }catch(e){ out.error = String(e); }
+  $("#live").textContent = JSON.stringify(out, null, 2);
+  report.live = out;
+  status("Done.");
+}
+
+$("#runLive").onclick = runLive;
+
+$("#copyJSON").onclick = async () => {
+  const blob = JSON.stringify({ ...report, input: val(), tab: currentTab, when: new Date().toISOString() }, null, 2);
+  await navigator.clipboard.writeText(blob).catch(()=>{});
+  status("Copied JSON to clipboard.");
+};
+$("#downloadJSON").onclick = () => {
+  const data = JSON.stringify({ ...report, input: val(), tab: currentTab, when: new Date().toISOString() }, null, 2);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([data], {type:"application/json"}));
+  a.download = `osint_${Date.now()}.json`;
+  a.click();
+};
+
+renderLinks(); // initial
+</script>
+
+<footer class="small" style="padding:16px;text-align:center;color:#7b8a99">
+  💡 Use responsibly. Some services rate-limit; live lookups only call CORS-friendly endpoints.
+</footer>
 </body>
 </html>
